@@ -20,6 +20,6 @@ public class ProductController {
 
     @GetMapping("/hello")
     public String hello() {
-        return "Welcome to Java Web App! 4:54 ";
+        return "Welcome to Java Web App! 5:43 ";
     }
 }
