@@ -6,11 +6,10 @@ on:
       - main
 
 env:
-  AWS_REGION: us-east-1
-  ECR_REGISTRY: 963665911471.dkr.ecr.us-east-1.amazonaws.com/poc
-  SONAR_HOST_URL: http://54.224.7.27:9000
-  SONAR_PROJECT_KEY: githubaction
-  PROJECT_NAME: poc
+  AWS_REGION: ${{vars.AWS_REGION}}
+  ECR_REGISTRY: ${{vars.ECR_REGISTRY}}
+  SONAR_HOST_URL: ${{vars.SONAR_HOST_URL}}
+  SONAR_PROJECT_KEY: ${{vars.SONAR_PROJECT_KEY}}
 jobs:
   build:
     runs-on: [self-hosted,ec2-label]
