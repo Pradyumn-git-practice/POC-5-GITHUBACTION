@@ -13,7 +13,7 @@ env:
 
 jobs:
   build:
-    runs-on: [self-hosted, ec2-label] 
+    runs-on: [self-hosted, ec2] 
 
     steps:
       - name: Checkout Code
