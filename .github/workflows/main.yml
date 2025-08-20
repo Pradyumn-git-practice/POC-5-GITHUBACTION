@@ -10,7 +10,7 @@ env:
   ECR_REGISTRY: 963665911471.dkr.ecr.us-east-1.amazonaws.com
   SONAR_HOST_URL: http://54.224.7.27:9000
   SONAR_PROJECT_KEY: githubaction
-  PROJECT_NAME: POC
+  PROJECT_NAME: poc
 jobs:
   build:
     runs-on: [self-hosted,ec2-label]
