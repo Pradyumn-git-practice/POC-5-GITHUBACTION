@@ -1,4 +1,4 @@
-name: CI-CD Pipeline
+name: Capstone Project 
 
 on:
   push:
@@ -11,7 +11,7 @@ env:
   SONAR_HOST_URL: ${{vars.SONAR_HOST_URL}}
   SONAR_PROJECT_KEY: ${{vars.SONAR_PROJECT_KEY}}
 jobs:
-  build:
+  build-and-deploy:
     runs-on: [self-hosted,ec2-label]
 
     steps:
