@@ -36,6 +36,12 @@ jobs:
       - name: Trivy Security Scan 
         run: trivy image --exit-code 0 --severity HIGH,CRITICAL --format json -o trivy-report.json ${{ env.ECR_REGISTRY }}:${{ github.run_number }}
 
+      - name: Upload Trivy report
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-scan-report
+          path: trivy-report.json
+
       - name: ECR login
         run: aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{env.ECR_REGISTRY}}
 
