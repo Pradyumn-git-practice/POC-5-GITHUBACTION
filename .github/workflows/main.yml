@@ -7,11 +7,10 @@ on:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REGISTRY: 963665911471.dkr.ecr.us-east-1.amazonaws.com/poc
-  ECR_REGISTRY_LOGIN: 963665911471.dkr.ecr.us-east-1.amazonaws.com
+  ECR_REGISTRY: 963665911471.dkr.ecr.us-east-1.amazonaws.com
   SONAR_HOST_URL: http://54.224.7.27:9000
   SONAR_PROJECT_KEY: githubaction
-
+  PROJECT_NAME: POC
 jobs:
   build:
     runs-on: [self-hosted,ec2-label]
@@ -36,14 +35,14 @@ jobs:
         run: docker build -t ${{ env.ECR_REGISTRY }}:${{ github.run_number }} .
 
       - name: Trivy Security Scan 
-        run: trivy image --exit-code 0 --severity HIGH,CRITICAL --format json -o trivy-report.json ${{ env.ECR_REGISTRY }}:${{ github.run_number }}
+        run: trivy image --exit-code 0 --severity HIGH,CRITICAL --format json -o trivy-report.json ${{ env.ECR_REGISTRY }}/${{env.PROJECT_NAME}}:${{ github.run_number }}
 
       - name: ECR login
         run: docker build -t ${{ env.ECR_REGISTRY }}:${{ github.run_number }} .
 
         
       - name: ECR login
-        run: aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{env.ECR_REGISTRY_LOGIN}}
+        run: aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{env.ECR_REGISTRY}}
 
 
       - name: Push to ECR
