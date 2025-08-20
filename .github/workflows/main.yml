@@ -1,0 +1,46 @@
+name: CI-CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 963665911471.dkr.ecr.us-east-1.amazonaws.com/poc
+  SONAR_HOST_URL: http://54.224.7.27:9000
+  SONAR_PROJECT_KEY: githubaction
+
+jobs:
+  build:
+    runs-on: [self-hosted, ec2-label] 
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v2
+
+      - name: SonarQube Scan with Quality Gate
+        uses: sonarsource/sonarqube-scan-action@v4.2.0
+        with:
+          args: >
+            -Dsonar.projectKey=${{ env.SONAR_PROJECT_KEY }}
+            -Dsonar.sources=.
+            -Dsonar.java.binaries=target/classes
+            -Dsonar.qualitygate.wait=true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONARQUBE_TOKEN }}
+          SONAR_HOST_URL: ${{ env.SONAR_HOST_URL }}
+
+      - name: Build Docker Image
+        run: docker build -t ${{ env.ECR_REGISTRY }}:${{ github.run_number }} .
+
+      - name: Trivy Security Scan
+        run: trivy image --exit-code 0 --severity HIGH,CRITICAL --format json -o trivy-report.json ${{ env.ECR_REGISTRY }}:${{ github.run_number }}
+
+      - name: Push to ECR
+        run: docker push ${{ env.ECR_REGISTRY }}:${{ github.run_number }}
+
+      - name: Deploy to Kubernetes
+        run: |
+          sed "s|IMAGE_TAG|${{ github.run_number }}|g" k8s/deployment.yaml > k8s/deployment.generated.yaml
+          kubectl apply -f k8s/deployment.generated.yaml
