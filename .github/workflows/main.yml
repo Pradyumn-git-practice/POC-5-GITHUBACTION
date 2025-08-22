@@ -54,22 +54,11 @@ jobs:
           sed "s|IMAGE_TAG|${{ github.run_number }}|g" k8s/deployment.yaml > k8s/deployment.generated.yaml
           kubectl apply -f k8s/deployment.generated.yaml
 
-      # ✅ Send notification email via AWS SES CLI
-      - name: Send email notification
-        if: always()
+      - name: Send Email via SES API
         run: |
           aws ses send-email \
-            --region ${{ env.AWS_REGION }} \
-            --from "pradyumnyadav0992@gmail.com" \
+            --from pradyumnyadav0992@gmail.com \
             --destination "ToAddresses=pradyumnyadav731830@gmail.com" \
-            --message "Subject={Data=Build & Deploy ${{ job.status }} - Capstone Project},Body={Text={Data=Hello Team,
+            --message "Subject={Data=Build & Deploy ${{ job.status }} - Capstone Project},Body={Text={Data=Hello Team, The pipeline completed.}}"
 
-The GitHub Actions workflow for Capstone Project has completed.
 
-Status: ${{ job.status }}
-Run Number: ${{ github.run_number }}
-Repository: ${{ github.repository }}
-Commit: ${{ github.sha }}
-
-Regards,
-CI/CD Pipeline}}"
