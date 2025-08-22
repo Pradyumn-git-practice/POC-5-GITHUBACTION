@@ -1,4 +1,4 @@
-name: Capstone Project 
+name: Capstone Project
 
 on:
   push:
@@ -6,13 +6,14 @@ on:
       - main
 
 env:
-  AWS_REGION: ${{vars.AWS_REGION}}
-  ECR_REGISTRY: ${{vars.ECR_REGISTRY}}
-  SONAR_HOST_URL: ${{vars.SONAR_HOST_URL}}
-  SONAR_PROJECT_KEY: ${{vars.SONAR_PROJECT_KEY}}
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  ECR_REGISTRY: ${{ vars.ECR_REGISTRY }}
+  SONAR_HOST_URL: ${{ vars.SONAR_HOST_URL }}
+  SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+
 jobs:
   build-and-deploy:
-    runs-on: [self-hosted,ec2-label]
+    runs-on: [self-hosted, ec2-label]
 
     steps:
       - name: Checkout Code
@@ -45,7 +46,6 @@ jobs:
       - name: ECR login
         run: aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{env.ECR_REGISTRY}}
 
-
       - name: Push to ECR
         run: docker push ${{ env.ECR_REGISTRY }}:${{ github.run_number }}
 
@@ -53,3 +53,28 @@ jobs:
         run: |
           sed "s|IMAGE_TAG|${{ github.run_number }}|g" k8s/deployment.yaml > k8s/deployment.generated.yaml
           kubectl apply -f k8s/deployment.generated.yaml
+
+      
+      - name: Send email notification
+        if: always()   
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: Build & Deploy ${{ job.status }} - Capstone Project
+          to: pradyumnyadav7318@gmail.com
+          from: GitHub Actions <${{ secrets.EMAIL_USERNAME }}>
+          body: |
+            Hello Team,
+
+            The GitHub Actions workflow for **Capstone Project** has completed.
+
+            Status: ${{ job.status }}
+            Run Number: ${{ github.run_number }}
+            Repository: ${{ github.repository }}
+            Commit: ${{ github.sha }}
+
+            Regards,
+            CI/CD Pipeline
