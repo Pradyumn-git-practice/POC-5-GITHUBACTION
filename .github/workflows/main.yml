@@ -16,30 +16,6 @@ jobs:
     runs-on: [self-hosted, ec2-label]
 
     steps:
-      - name: Send email notification
-        if: always()
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: email-smtp.us-east-1.amazonaws.com
-          server_port: 587
-          username: ${{ secrets.AWS_SES_SMTP_USER }}
-          password: ${{ secrets.AWS_SES_SMTP_PASS }}
-          subject: Build & Deploy ${{ job.status }} - Capstone Project
-          to: pradyumnyadav0992@gmail.com
-          from: pradyumnyadav731830@gmail.com
-          body: |
-            Hello Team,
-
-            The GitHub Actions workflow for **Capstone Project** has completed.
-
-            Status: ${{ job.status }}
-            Run Number: ${{ github.run_number }}
-            Repository: ${{ github.repository }}
-            Commit: ${{ github.sha }}
-
-            Regards,
-            CI/CD Pipeline
-
       - name: Checkout Code
         uses: actions/checkout@v2
 
@@ -68,7 +44,7 @@ jobs:
           path: trivy-report.json
 
       - name: ECR login
-        run: aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ${{env.ECR_REGISTRY}}
+        run: aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{env.ECR_REGISTRY}}
 
       - name: Push to ECR
         run: docker push ${{ env.ECR_REGISTRY }}:${{ github.run_number }}
@@ -78,30 +54,15 @@ jobs:
           sed "s|IMAGE_TAG|${{ github.run_number }}|g" k8s/deployment.yaml > k8s/deployment.generated.yaml
           kubectl apply -f k8s/deployment.generated.yaml
 
-      
+     
       - name: Send email notification
         if: always()
-        uses: dawidd6/action-send-mail@v3
-        with:
-          server_address: email-smtp.us-east-1.amazonaws.com
-          server_port: 587
-          username: ${{ secrets.AWS_SES_SMTP_USER }}
-          password: ${{ secrets.AWS_SES_SMTP_PASS }}
-          subject: Build & Deploy ${{ job.status }} - Capstone Project
-          to: pradyumnyadav731830@gmail.com
-          from: pradyumnyadav0992@gmail.com
-          reply_to: pradyumnyadav731830@gmail.com  
-          body: |
-            Hello Team,
-
-            The GitHub Actions workflow for **Capstone Project** has completed.
-
-            Status: ${{ job.status }}
-            Run Number: ${{ github.run_number }}
-            Repository: ${{ github.repository }}
-            Commit: ${{ github.sha }}
-
-            Regards,
-            CI/CD Pipeline
-
-
+        run: |
+          aws ses send-email \
+            --region ${{ env.AWS_REGION }} \
+            --from "pradyumnyadav0992@gmail.com" \
+            --destination "ToAddresses=pradyumnyadav731830@gmail.com" \
+            --message "Subject={Data='Build & Deploy ${{ job.status }} - Capstone Project'},Body={Text={Data='Hello Team,\n\nThe GitHub Actions workflow for Capstone Project has completed.\n\nStatus: ${{ job.status }}\nRun Number: ${{ github.run_number }}\nRepository: ${{ github.repository }}\nCommit: ${{ github.sha }}\n\nRegards,\nCI/CD Pipeline'}}"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
