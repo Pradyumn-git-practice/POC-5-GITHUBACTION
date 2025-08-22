@@ -64,7 +64,7 @@ jobs:
           username: ${{ secrets.AWS_SES_SMTP_USER }}
           password: ${{ secrets.AWS_SES_SMTP_PASS }}
           subject: Build & Deploy ${{ job.status }} - Capstone Project
-          to: pradyumnyadav7318@gmail.com
+          to: pradyumnyadav731830@gmail.com
           from: pradyumnyadav0992@gmail.com
           body: |
             Hello Team,
