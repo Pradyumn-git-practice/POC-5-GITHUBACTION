@@ -19,6 +19,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v2
 
+      - name: Clean workspace contents
+        run: |
+          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
       - name: SonarQube Scan with Quality Gate
         uses: sonarsource/sonarqube-scan-action@v4.2.0
         with:
