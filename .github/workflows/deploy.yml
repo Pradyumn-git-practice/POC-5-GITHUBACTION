@@ -19,11 +19,13 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
 
       - name: Set Environment Variables
         run: |
           BRANCH_NAME="${GITHUB_REF##*/}"
-          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+          BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
           echo "IMAGE_TAG=build-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
       
           if [[ "$BRANCH_NAME" == "pps-master" ]]; then
