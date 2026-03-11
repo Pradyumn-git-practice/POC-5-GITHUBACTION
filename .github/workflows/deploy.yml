@@ -9,7 +9,7 @@ on:
 jobs:
   deploy:
     runs-on: ${{ github.ref_name == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'pps-master' || github.event.workflow_run.head_branch == 'qa') }}
     
     env:
       TARGET_DIR: "/home/ubuntu/app"
@@ -27,7 +27,7 @@ jobs:
           BRANCH_NAME="${GITHUB_REF##*/}"
           BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
           echo "IMAGE_TAG=build-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
-      
+
           if [[ "$BRANCH_NAME" == "pps-master" ]]; then
             echo "COMPOSE_FILE=docker-compose-prod.yml" >> $GITHUB_ENV
             echo "ENV=production" >> $GITHUB_ENV
