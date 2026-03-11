@@ -54,7 +54,7 @@ jobs:
             aws secretsmanager get-secret-value --secret-id "$APP_SECRET_NAME" --query SecretString --output text \
               | jq -r 'to_entries|map("\(.key)=\(.value)")|.[]' > .env
 
-            aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+            aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
 
             IMAGE_TAG=${{env.IMAGE_TAG}}  docker compose -f ${{ env.COMPOSE_FILE }} pull
 
