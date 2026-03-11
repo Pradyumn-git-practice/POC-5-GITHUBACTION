@@ -12,10 +12,7 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     
     env:
-      APP_SERVER: ${{ secrets.APP_SERVER }}
       TARGET_DIR: "/home/ubuntu/app"
-      SSH_USER: ${{ secrets.SSH_USER_NAME }}
-      APP_SECRET_NAME: ${{ secrets.MY_APP_SECRETS_NAME }}
       ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
       IMAGE_NAME: ${{ vars.IMAGE_NAME }}
 
@@ -31,8 +28,16 @@ jobs:
       
           if [[ "$BRANCH_NAME" == "pps-master" ]]; then
             echo "COMPOSE_FILE=docker-compose-prod.yml" >> $GITHUB_ENV
+            echo "ENV=production" >> $GITHUB_ENV
+            echo "APP_SERVER=${{ secrets.APP_SERVER_PROD }}" >> $GITHUB_ENV
+            echo "SSH_USER=${{ secrets.SSH_USER_NAME_PROD }}" >> $GITHUB_ENV
+            echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_PROD }}" >> $GITHUB_ENV
           elif [[ "$BRANCH_NAME" == "qa" ]]; then
             echo "COMPOSE_FILE=docker-compose-qa.yml" >> $GITHUB_ENV
+            echo "ENV=dev" >> $GITHUB_ENV
+            echo "APP_SERVER=${{ secrets.APP_SERVER_DEV }}" >> $GITHUB_ENV
+            echo "SSH_USER=${{ secrets.SSH_USER_NAME_DEV }}" >> $GITHUB_ENV
+            echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_DEV }}" >> $GITHUB_ENV
           else
             echo "Unsupported branch: $BRANCH_NAME"
             exit 1
