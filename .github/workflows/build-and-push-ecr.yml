@@ -1,0 +1,63 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - qa
+      - pps-master
+
+
+env:
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+  IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+
+jobs:
+  build-and-push-ecr:
+    runs-on: ${{ github.ref_name == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
+    
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Environment Variables
+        run: |
+          BRANCH_NAME="${GITHUB_REF##*/}"
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+          echo "IMAGE_TAG=build-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+      
+          if [[ "$BRANCH_NAME" == "pps-master" ]]; then
+            echo "ENV=production" >> $GITHUB_ENV
+          elif [[ "$BRANCH_NAME" == "qa" ]]; then
+            echo "ENV=dev" >> $GITHUB_ENV
+          else
+            echo "Unsupported branch: $BRANCH_NAME"
+            exit 1
+          fi
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin $ECR_REGISTRY
+        
+
+      - name: Build Docker Image
+        run: |
+            docker build -t $ECR_REGISTRY/$IMAGE_NAME-$ENV:$IMAGE_TAG .
+
+
+      - name: Push Docker Image to ECR
+        run: |
+          docker push $ECR_REGISTRY/$IMAGE_NAME-$ENV:$IMAGE_TAG
+
+      - name: Cleanup Docker
+        if: always()
+        run: |
+          docker system prune -af --volumes
+          
+      - name: Cleanup workspace
+        if: always()
+        run: |
+          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +

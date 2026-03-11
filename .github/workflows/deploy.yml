@@ -1,0 +1,68 @@
+name: Deploy to EC2
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Docker Image"] # Trigger after build finishes
+    types: [completed]
+    branches: [qa, pps-master]
+
+jobs:
+  deploy:
+    runs-on: ${{ github.ref_name == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
+    env:
+      APP_SERVER: ${{ secrets.APP_SERVER }}
+      TARGET_DIR: "/home/ubuntu/app"
+      SSH_USER: ${{ secrets.SSH_USER_NAME }}
+      APP_SECRET_NAME: ${{ secrets.MY_APP_SECRETS_NAME }}
+      ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+      IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Environment Variables
+        run: |
+          BRANCH_NAME="${GITHUB_REF##*/}"
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+          echo "IMAGE_TAG=build-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+      
+          if [[ "$BRANCH_NAME" == "pps-master" ]]; then
+            echo "COMPOSE_FILE=docker-compose-prod.yml" >> $GITHUB_ENV
+          elif [[ "$BRANCH_NAME" == "qa" ]]; then
+            echo "COMPOSE_FILE=docker-compose-qa.yml" >> $GITHUB_ENV
+          else
+            echo "Unsupported branch: $BRANCH_NAME"
+            exit 1
+          fi
+
+      - name: 1. Copy Docker Compose to App Server
+        run: |
+          ssh -o StrictHostKeyChecking=no $SSH_USER@$APP_SERVER "mkdir -p $TARGET_DIR"
+
+          scp -o StrictHostKeyChecking=no docker-compose.yml $SSH_USER@$APP_SERVER:$TARGET_DIR/docker-compose.yml
+
+      - name: 2. Create .env, Pull and Run Docker Compose
+        run: |
+          ssh -o StrictHostKeyChecking=no $SSH_USER@$APP_SERVER << 'EOF'
+            set -e
+
+            cd $TARGET_DIR
+
+            aws secretsmanager get-secret-value --secret-id "$APP_SECRET_NAME" --query SecretString --output text \
+              | jq -r 'to_entries|map("\(.key)=\(.value)")|.[]' > .env
+
+            aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+
+            IMAGE_TAG=${{env.IMAGE_TAG}}  docker compose -f ${{ env.COMPOSE_FILE }} pull
+
+            IMAGE_TAG=${{env.IMAGE_TAG}}  docker compose -f ${{ env.COMPOSE_FILE }} up -d
+
+          EOF
+
+      - name: Cleanup workspace
+        if: always()
+        run: |
+          find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
