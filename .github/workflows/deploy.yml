@@ -26,33 +26,51 @@ jobs:
       IMAGE_NAME: ${{ vars.IMAGE_NAME }}
 
     steps:
+
       - name: Checkout Code
         uses: actions/checkout@v4
-        # with:
-        #   ref: ${{ github.event.workflow_run.head_branch }}
+        # No 'ref' needed! It automatically checks out the branch that called it.
 
       - name: Set Environment Variables
         run: |
-
-          BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
-          echo "IMAGE_TAG=build-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
-
-          if [[ "$BRANCH_NAME" == "pps-master" ]]; then
+          if [[ "${{ inputs.branch }}" == "pps-master" ]]; then
             echo "COMPOSE_FILE=docker-compose-prod.yml" >> $GITHUB_ENV
-            echo "ENV=production" >> $GITHUB_ENV
             echo "APP_SERVER=${{ secrets.APP_SERVER_PROD }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.SSH_USER_NAME_PROD }}" >> $GITHUB_ENV
             echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_PROD }}" >> $GITHUB_ENV
-          elif [[ "$BRANCH_NAME" == "qa" ]]; then
+          else
             echo "COMPOSE_FILE=docker-compose-qa.yml" >> $GITHUB_ENV
-            echo "ENV=dev" >> $GITHUB_ENV
             echo "APP_SERVER=${{ secrets.APP_SERVER_DEV }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.SSH_USER_NAME_DEV }}" >> $GITHUB_ENV
             echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_DEV }}" >> $GITHUB_ENV
-          else
-            echo "Unsupported branch: $BRANCH_NAME"
-            exit 1
           fi
+      # - name: Checkout Code
+      #   uses: actions/checkout@v4
+      #   # with:
+      #   #   ref: ${{ github.event.workflow_run.head_branch }}
+
+      # - name: Set Environment Variables
+      #   run: |
+
+      #     BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
+      #     echo "IMAGE_TAG=build-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+
+      #     if [[ "$BRANCH_NAME" == "pps-master" ]]; then
+      #       echo "COMPOSE_FILE=docker-compose-prod.yml" >> $GITHUB_ENV
+      #       echo "ENV=production" >> $GITHUB_ENV
+      #       echo "APP_SERVER=${{ secrets.APP_SERVER_PROD }}" >> $GITHUB_ENV
+      #       echo "SSH_USER=${{ secrets.SSH_USER_NAME_PROD }}" >> $GITHUB_ENV
+      #       echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_PROD }}" >> $GITHUB_ENV
+      #     elif [[ "$BRANCH_NAME" == "qa" ]]; then
+      #       echo "COMPOSE_FILE=docker-compose-qa.yml" >> $GITHUB_ENV
+      #       echo "ENV=dev" >> $GITHUB_ENV
+      #       echo "APP_SERVER=${{ secrets.APP_SERVER_DEV }}" >> $GITHUB_ENV
+      #       echo "SSH_USER=${{ secrets.SSH_USER_NAME_DEV }}" >> $GITHUB_ENV
+      #       echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_DEV }}" >> $GITHUB_ENV
+      #     else
+      #       echo "Unsupported branch: $BRANCH_NAME"
+      #       exit 1
+      #     fi
 
       - name: 1. Copy Docker Compose to App Server
         run: |
