@@ -62,3 +62,12 @@ jobs:
         if: always()
         run: |
           find "$GITHUB_WORKSPACE" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+# Calling the deploy workflow directly
+  trigger-deploy:
+    needs: build-and-push-ecr
+    uses: ./.github/workflows/deploy.yml
+    with:
+      branch: ${{ github.ref_name }}
+      image_tag: build-${{ github.run_number }}
+    secrets: inherit # This passes all your secrets (ECR, SSH, etc.) to the next file
