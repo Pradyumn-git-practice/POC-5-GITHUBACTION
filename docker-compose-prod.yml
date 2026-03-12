@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image:  003380494896.dkr.ecr.ap-south-1.amazonaws.com/realt-pps-be-dev:${IMAGE_TAG?IMAGE_TAG environment variable is required}
+    image:  003380494896.dkr.ecr.ap-south-1.amazonaws.com/realt-pps-be-production:${IMAGE_TAG?IMAGE_TAG environment variable is required}
     ports:
       - "8080:8080"
     environment:
