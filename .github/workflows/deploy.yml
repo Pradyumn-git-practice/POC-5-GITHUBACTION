@@ -10,6 +10,7 @@ on:
         required: true
         type: string
 
+
 jobs:
   deploy:
     runs-on: ${{ github.ref_name == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
@@ -55,15 +56,12 @@ jobs:
 
             cd $TARGET_DIR
 
-            aws secretsmanager get-secret-value \
-              --secret-id "$APP_SECRET_NAME" \
-              --query SecretString \
-              --output text > .env
+            aws secretsmanager get-secret-value --secret-id "$APP_SECRET_NAME" --query SecretString --output text > .env
 
             chmod 600 .env
             
             aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REGISTRY
-            
+
             export IMAGE_TAG=${{ inputs.image_tag }}
             docker compose -f $COMPOSE_FILE pull
             docker compose -f $COMPOSE_FILE up -d
