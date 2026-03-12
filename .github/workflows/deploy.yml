@@ -32,81 +32,57 @@ jobs:
         # No 'ref' needed! It automatically checks out the branch that called it.
 
       - name: Set Environment Variables
+        id: vars
         run: |
-          if [[ "${{ inputs.branch }}" == "pps-master" ]]; then
-            echo "COMPOSE_FILE=docker-compose-prod.yml" >> $GITHUB_ENV
-            echo "APP_SERVER=${{ secrets.APP_SERVER_PROD }}" >> $GITHUB_ENV
-            echo "SSH_USER=${{ secrets.SSH_USER_NAME_PROD }}" >> $GITHUB_ENV
-            echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_PROD }}" >> $GITHUB_ENV
+          # 1. Force the branch name from the trigger
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+          # 2. Match the tag from the build workflow
+          TAG="build-${{ github.event.workflow_run.run_number }}"
+          
+          echo "IMAGE_TAG=$TAG" >> $GITHUB_ENV
+          
+          if [[ "$BRANCH" == "pps-master" ]]; then
+            echo "FILE=docker-compose-prod.yml" >> $GITHUB_ENV
+            echo "SRV=${{ secrets.APP_SERVER_PROD }}" >> $GITHUB_ENV
+            echo "USR=${{ secrets.SSH_USER_NAME_PROD }}" >> $GITHUB_ENV
+            echo "SEC=${{ secrets.APP_SECRET_NAME_PROD }}" >> $GITHUB_ENV
           else
-            echo "COMPOSE_FILE=docker-compose-qa.yml" >> $GITHUB_ENV
-            echo "APP_SERVER=${{ secrets.APP_SERVER_DEV }}" >> $GITHUB_ENV
-            echo "SSH_USER=${{ secrets.SSH_USER_NAME_DEV }}" >> $GITHUB_ENV
-            echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_DEV }}" >> $GITHUB_ENV
+            echo "FILE=docker-compose-qa.yml" >> $GITHUB_ENV
+            echo "SRV=${{ secrets.APP_SERVER_DEV }}" >> $GITHUB_ENV
+            echo "USR=${{ secrets.SSH_USER_NAME_DEV }}" >> $GITHUB_ENV
+            echo "SEC=${{ secrets.APP_SECRET_NAME_DEV }}" >> $GITHUB_ENV
           fi
-      # - name: Checkout Code
-      #   uses: actions/checkout@v4
-      #   # with:
-      #   #   ref: ${{ github.event.workflow_run.head_branch }}
 
-      # - name: Set Environment Variables
-      #   run: |
+      - name: 1. Copy Files to Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.SRV }}
+          username: ${{ env.USR }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "${{ env.FILE }},docker-compose.yml" # Copy both files
+          target: "/home/ubuntu/app"
 
-      #     BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
-      #     echo "IMAGE_TAG=build-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
-
-      #     if [[ "$BRANCH_NAME" == "pps-master" ]]; then
-      #       echo "COMPOSE_FILE=docker-compose-prod.yml" >> $GITHUB_ENV
-      #       echo "ENV=production" >> $GITHUB_ENV
-      #       echo "APP_SERVER=${{ secrets.APP_SERVER_PROD }}" >> $GITHUB_ENV
-      #       echo "SSH_USER=${{ secrets.SSH_USER_NAME_PROD }}" >> $GITHUB_ENV
-      #       echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_PROD }}" >> $GITHUB_ENV
-      #     elif [[ "$BRANCH_NAME" == "qa" ]]; then
-      #       echo "COMPOSE_FILE=docker-compose-qa.yml" >> $GITHUB_ENV
-      #       echo "ENV=dev" >> $GITHUB_ENV
-      #       echo "APP_SERVER=${{ secrets.APP_SERVER_DEV }}" >> $GITHUB_ENV
-      #       echo "SSH_USER=${{ secrets.SSH_USER_NAME_DEV }}" >> $GITHUB_ENV
-      #       echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_DEV }}" >> $GITHUB_ENV
-      #     else
-      #       echo "Unsupported branch: $BRANCH_NAME"
-      #       exit 1
-      #     fi
-
-      - name: 1. Copy Docker Compose to App Server
-        run: |
-          ssh -o StrictHostKeyChecking=no $SSH_USER@$APP_SERVER "mkdir -p $TARGET_DIR"
-
-          scp -o StrictHostKeyChecking=no  ${{ env.COMPOSE_FILE }} $SSH_USER@$APP_SERVER:$TARGET_DIR/
-
-      - name: 2. Create .env, Pull and Run Docker Compose
-        run: |
-          # We remove the quotes from << EOF so variables expand, 
-          # BUT we must escape the variables we want to run ON the server (like jq)
-          ssh -o StrictHostKeyChecking=no $SSH_USER@$APP_SERVER << EOF
-            set -e
+      - name: 2. Execute Remote Commands
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ env.SRV }}
+          username: ${{ env.USR }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # Pass variables into the remote shell environment
+          envs: IMAGE_TAG,ECR_REGISTRY,IMAGE_NAME,SEC,FILE,TARGET_DIR
+          script: |
+            cd /home/ubuntu/app
             
-            # These variables are expanded by GitHub before sending to SSH
-            cd ${{ env.TARGET_DIR }}
-            
-            # Pass the secret name and ECR registry directly from GitHub context
-            aws secretsmanager get-secret-value --secret-id "${{ env.APP_SECRET_NAME }}" --query SecretString --output text \
-              | jq -r 'to_entries|map("\(.key)=\(.value)")|.[]' > .env
-  
+            # Login to ECR
             aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-  
-            # Inject the TAG and Registry into the docker compose command
-            IMAGE_TAG=${{ env.IMAGE_TAG }} \
-            ECR_REGISTRY=${{ secrets.ECR_REGISTRY }} \
-            IMAGE_NAME=${{ vars.IMAGE_NAME }} \
-            ENV=${{ env.ENV }} \
-            docker compose -f ${{ env.COMPOSE_FILE }} pull
-  
-            IMAGE_TAG=${{ env.IMAGE_TAG }} \
-            ECR_REGISTRY=${{ secrets.ECR_REGISTRY }} \
-            IMAGE_NAME=${{ vars.IMAGE_NAME }} \
-            ENV=${{ env.ENV }} \
-            docker compose -f ${{ env.COMPOSE_FILE }} up -d
-          EOF
+            
+            # Fetch secrets to .env
+            aws secretsmanager get-secret-value --secret-id "$SEC" --query SecretString --output text \
+              | jq -r 'to_entries|map("\(.key)=\(.value)")|.[]' > .env
+            
+            # Pull and Run
+            IMAGE_TAG=$IMAGE_TAG docker compose -f $FILE pull
+            IMAGE_TAG=$IMAGE_TAG docker compose -f $FILE up -d
 
       - name: Cleanup workspace
         if: always()
