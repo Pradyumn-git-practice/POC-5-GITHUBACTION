@@ -63,7 +63,8 @@ jobs:
             chmod 600 .env
             
             aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REGISTRY
-
+            
+            export IMAGE_TAG=${{ inputs.image_tag }}
             docker compose -f $COMPOSE_FILE pull
             docker compose -f $COMPOSE_FILE up -d
           EOF
