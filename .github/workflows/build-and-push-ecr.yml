@@ -53,10 +53,10 @@ jobs:
         run: |
           docker push $ECR_REGISTRY/$IMAGE_NAME-$ENV:$IMAGE_TAG
 
-      - name: Cleanup Docker
-        if: always()
-        run: |
-          docker system prune -af --volumes
+      # - name: Cleanup Docker
+      #   if: always()
+      #   run: |
+      #     docker system prune -af --volumes
           
       - name: Cleanup workspace
         if: always()
