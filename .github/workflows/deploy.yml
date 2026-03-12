@@ -18,7 +18,7 @@ on:
 jobs:
   deploy:
     runs-on: ${{ github.ref_name == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
-    if: ${{ github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'pps-master' || github.event.workflow_run.head_branch == 'qa') }}
+    # if: ${{ github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.head_branch == 'pps-master' || github.event.workflow_run.head_branch == 'qa') }}
     
     env:
       TARGET_DIR: "/home/ubuntu/app"
@@ -28,8 +28,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+        # with:
+        #   ref: ${{ github.event.workflow_run.head_branch }}
 
       - name: Set Environment Variables
         run: |
