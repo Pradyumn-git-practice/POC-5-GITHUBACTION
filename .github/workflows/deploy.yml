@@ -24,7 +24,7 @@ jobs:
 
       - name: Set Environment Variables
         run: |
-          # BRANCH_NAME="${GITHUB_REF##*/}"
+
           BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
           echo "IMAGE_TAG=build-${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
 
