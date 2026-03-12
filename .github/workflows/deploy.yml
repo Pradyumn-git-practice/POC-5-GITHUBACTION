@@ -58,6 +58,7 @@ jobs:
 
             cd $TARGET_DIR
 
+
             aws secretsmanager get-secret-value --secret-id "$APP_SECRET_NAME" --query SecretString --output text > .env
 
             chmod 600 .env
