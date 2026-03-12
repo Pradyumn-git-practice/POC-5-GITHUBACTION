@@ -28,11 +28,13 @@ jobs:
       - name: Set Environment Variables
         run: |
           if [[ "${{ inputs.branch }}" == "pps-master" ]]; then
+            echo "ENV=production" >> $GITHUB_ENV
             echo "COMPOSE_FILE=docker-compose-prod.yml" >> $GITHUB_ENV
             echo "APP_SERVER=${{ secrets.APP_SERVER_PROD }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.SSH_USER_NAME_PROD }}" >> $GITHUB_ENV
             echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_PROD }}" >> $GITHUB_ENV
           elif [[ "${{ inputs.branch }}" == "qa" ]]; then
+            echo "ENV=dev" >> $GITHUB_ENV
             echo "COMPOSE_FILE=docker-compose-qa.yml" >> $GITHUB_ENV
             echo "APP_SERVER=${{ secrets.APP_SERVER_DEV }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.SSH_USER_NAME_DEV }}" >> $GITHUB_ENV
@@ -65,6 +67,7 @@ jobs:
             export IMAGE_TAG=${{ inputs.image_tag }}
             docker compose -f $COMPOSE_FILE pull
             docker compose -f $COMPOSE_FILE up -d --force-recreate
+            docker images "$ECR_REGISTRY/$IMAGE_NAME-$ENV:$IMAGE_TAG" --filter "dangling=false" -q | xargs -r docker rmi || true
           EOF
 
       - name: Cleanup workspace
