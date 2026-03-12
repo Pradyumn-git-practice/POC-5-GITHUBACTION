@@ -53,7 +53,7 @@ jobs:
       - name: 2. Create .env, Pull and Run Docker Compose
         run: |
           ssh -T -o StrictHostKeyChecking=no $SSH_USER@$APP_SERVER << EOF
-            # set -euo pipefail
+            set -euo pipefail
             set +x
 
             cd $TARGET_DIR
@@ -69,7 +69,7 @@ jobs:
             docker compose -f $COMPOSE_FILE pull
             docker compose -f $COMPOSE_FILE up -d --force-recreate
 
-            docker images "$ECR_REGISTRY/$IMAGE_NAME-$ENV" --format "{{.ID}}" | tail -n +2 | xargs -r docker rmi
+            # docker images "$ECR_REGISTRY/$IMAGE_NAME-$ENV" --format "{{.ID}}" | tail -n +3 | xargs -r docker rmi
           EOF
 
       - name: Cleanup workspace
