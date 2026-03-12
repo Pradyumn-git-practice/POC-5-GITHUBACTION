@@ -88,24 +88,18 @@ jobs:
             cd ${{ env.TARGET_DIR }}
             
   
-          aws secretsmanager get-secret-value \
-            --secret-id "${{ env.APP_SECRET_NAME }}" \
-            --query SecretString \
-            --output json \
-          | jq -r 'fromjson | to_entries | map("\(.key)=\(.value)") | .[]' > .env
+            aws secretsmanager get-secret-value \
+              --secret-id "${{ env.APP_SECRET_NAME }}" \
+              --query SecretString \
+              --output text > .env
   
             aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-  
-            IMAGE_TAG=${{ env.IMAGE_TAG }} \
-            ECR_REGISTRY=${{ secrets.ECR_REGISTRY }} \
-            IMAGE_NAME=${{ vars.IMAGE_NAME }} \
-            ENV=${{ env.ENV }} \
+
+            export IMAGE_TAG=${{ inputs.image_tag }}
+            export ECR_REGISTRY=${{ secrets.ECR_REGISTRY }}
+            export IMAGE_NAME=${{ vars.IMAGE_NAME }}
+
             docker compose -f ${{ env.COMPOSE_FILE }} pull
-  
-            IMAGE_TAG=${{ env.IMAGE_TAG }} \
-            ECR_REGISTRY=${{ secrets.ECR_REGISTRY }} \
-            IMAGE_NAME=${{ vars.IMAGE_NAME }} \
-            ENV=${{ env.ENV }} \
             docker compose -f ${{ env.COMPOSE_FILE }} up -d
           EOF
 
