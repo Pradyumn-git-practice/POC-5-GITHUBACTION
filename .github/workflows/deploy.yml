@@ -80,20 +80,32 @@ jobs:
 
       - name: 2. Create .env, Pull and Run Docker Compose
         run: |
-          ssh -o StrictHostKeyChecking=no $SSH_USER@$APP_SERVER << 'EOF'
+          # We remove the quotes from << EOF so variables expand, 
+          # BUT we must escape the variables we want to run ON the server (like jq)
+          ssh -o StrictHostKeyChecking=no $SSH_USER@$APP_SERVER << EOF
             set -e
-
-            cd $TARGET_DIR
-
-            aws secretsmanager get-secret-value --secret-id "$APP_SECRET_NAME" --query SecretString --output text \
+            
+            # These variables are expanded by GitHub before sending to SSH
+            cd ${{ env.TARGET_DIR }}
+            
+            # Pass the secret name and ECR registry directly from GitHub context
+            aws secretsmanager get-secret-value --secret-id "${{ env.APP_SECRET_NAME }}" --query SecretString --output text \
               | jq -r 'to_entries|map("\(.key)=\(.value)")|.[]' > .env
-
+  
             aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-
-            IMAGE_TAG=${{env.IMAGE_TAG}}  docker compose -f ${{ env.COMPOSE_FILE }} pull
-
-            IMAGE_TAG=${{env.IMAGE_TAG}}  docker compose -f ${{ env.COMPOSE_FILE }} up -d
-
+  
+            # Inject the TAG and Registry into the docker compose command
+            IMAGE_TAG=${{ env.IMAGE_TAG }} \
+            ECR_REGISTRY=${{ secrets.ECR_REGISTRY }} \
+            IMAGE_NAME=${{ vars.IMAGE_NAME }} \
+            ENV=${{ env.ENV }} \
+            docker compose -f ${{ env.COMPOSE_FILE }} pull
+  
+            IMAGE_TAG=${{ env.IMAGE_TAG }} \
+            ECR_REGISTRY=${{ secrets.ECR_REGISTRY }} \
+            IMAGE_NAME=${{ vars.IMAGE_NAME }} \
+            ENV=${{ env.ENV }} \
+            docker compose -f ${{ env.COMPOSE_FILE }} up -d
           EOF
 
       - name: Cleanup workspace
