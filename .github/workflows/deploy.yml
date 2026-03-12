@@ -31,7 +31,7 @@ jobs:
             echo "APP_SERVER=${{ secrets.APP_SERVER_PROD }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.SSH_USER_NAME_PROD }}" >> $GITHUB_ENV
             echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_PROD }}" >> $GITHUB_ENV
-          elif [[ "$BRANCH_NAME" == "qa" ]]; then
+          elif [[ "${{ inputs.branch }}" == "qa" ]]; then
             echo "COMPOSE_FILE=docker-compose-qa.yml" >> $GITHUB_ENV
             echo "APP_SERVER=${{ secrets.APP_SERVER_DEV }}" >> $GITHUB_ENV
             echo "SSH_USER=${{ secrets.SSH_USER_NAME_DEV }}" >> $GITHUB_ENV
