@@ -1,5 +1,6 @@
 name: Build and Push Docker Image
-   
+
+
 on:
   push:
     branches:
@@ -16,6 +17,9 @@ on:
         options:
           - qa
           - pps-master
+
+
+run-name: ${{ github.event.inputs.branch || github.ref_name }} | Build #${{ github.run_number }} | ${{ github.event.head_commit.message || 'Manual run' }}
 
 env:
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
