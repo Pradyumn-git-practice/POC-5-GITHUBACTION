@@ -1,4 +1,4 @@
-name: Deploy to EC2
+name: Deploy Docker Image to Server
 
 on:
   workflow_call:
@@ -10,32 +10,53 @@ on:
         required: true
         type: string
 
+  workflow_dispatch:
+    inputs:
+      branch:  # Used for environment selection selection
+        description: Branch to deploy
+        required: true
+        default: qa
+        type: choice
+        options:
+          - qa
+          - pps-master
+
+      image_tag:
+        description: Docker image tag
+        required: true
+
+concurrency:
+  group: deploy-${{ inputs.branch || github.event.inputs.branch }}
+  cancel-in-progress: true
 
 jobs:
   deploy:
-    runs-on: ${{ github.ref_name == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
-    
+    runs-on: ${{ (inputs.branch || github.event.inputs.branch) == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}    
     env:
-      TARGET_DIR: "/home/ubuntu/app"
+      TARGET_DIR:  ${{ vars.TARGET_DIR }}
       ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
       IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+      REGION: ${{ secrets.REGION }}
 
     steps:
 
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch || github.event.inputs.branch }}
 
       - name: Set Environment Variables
         run: |
-          if [[ "${{ inputs.branch }}" == "pps-master" ]]; then
+          BRANCH_NAME="${{ inputs.branch || github.event.inputs.branch }}"
+          if [[ "$BRANCH_NAME" == "pps-master" ]]; then
+            echo "ENV=production" >> $GITHUB_ENV
             echo "COMPOSE_FILE=docker-compose-prod.yml" >> $GITHUB_ENV
             echo "APP_SERVER=${{ secrets.APP_SERVER_PROD }}" >> $GITHUB_ENV
-            echo "SSH_USER=${{ secrets.SSH_USER_NAME_PROD }}" >> $GITHUB_ENV
             echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_PROD }}" >> $GITHUB_ENV
-          elif [[ "${{ inputs.branch }}" == "qa" ]]; then
+          elif [[ "$BRANCH_NAME" == "qa" ]]; then
+            echo "ENV=dev" >> $GITHUB_ENV
             echo "COMPOSE_FILE=docker-compose-qa.yml" >> $GITHUB_ENV
             echo "APP_SERVER=${{ secrets.APP_SERVER_DEV }}" >> $GITHUB_ENV
-            echo "SSH_USER=${{ secrets.SSH_USER_NAME_DEV }}" >> $GITHUB_ENV
             echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_DEV }}" >> $GITHUB_ENV
           else
               echo "Unsupported branch: ${{ inputs.branch }}"
@@ -44,27 +65,25 @@ jobs:
 
       - name: 1. Copy Docker Compose to App Server
         run: |
-          ssh -o StrictHostKeyChecking=no $SSH_USER@$APP_SERVER "mkdir -p $TARGET_DIR"
+          ssh -o StrictHostKeyChecking=no $APP_SERVER "mkdir -p $TARGET_DIR"
 
-          scp -o StrictHostKeyChecking=no  ${{ env.COMPOSE_FILE }} $SSH_USER@$APP_SERVER:$TARGET_DIR/
+          scp -o StrictHostKeyChecking=no  ${{ env.COMPOSE_FILE }} $APP_SERVER:$TARGET_DIR/
 
       - name: 2. Create .env, Pull and Run Docker Compose
         run: |
-          ssh -T -o StrictHostKeyChecking=no $SSH_USER@$APP_SERVER << EOF
+          ssh -T -o StrictHostKeyChecking=no $APP_SERVER << EOF
             set -euo pipefail
             set +x
 
             cd $TARGET_DIR
-
-            aws secretsmanager get-secret-value --secret-id "$APP_SECRET_NAME" --query SecretString --output text > .env
-
-            chmod 600 .env
             
-            aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin $ECR_REGISTRY
+            aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
 
-            export IMAGE_TAG=${{ inputs.image_tag }}
+            export IMAGE_TAG=${{ inputs.image_tag || github.event.inputs.image_tag }}
             docker compose -f $COMPOSE_FILE pull
             docker compose -f $COMPOSE_FILE up -d --force-recreate
+            docker images "$ECR_REGISTRY/$IMAGE_NAME-$ENV" --format "{{.ID}}" | tail -n +4 | xargs -r docker image rm -f 2>/dev/null || true
+
           EOF
 
       - name: Cleanup workspace
