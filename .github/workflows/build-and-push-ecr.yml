@@ -19,13 +19,13 @@ on:
           - pps-master
 
 
-run-name: ${{ github.event.inputs.branch || github.ref_name }} | Build #${{ github.run_number }} | ${{ github.event.head_commit.message || 'Manual run' }}
+run-name: ${{ github.event.inputs.branch || github.ref_name }} | Build #${{ github.run_number }}
 
 env:
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
   IMAGE_NAME: ${{ vars.IMAGE_NAME }}
   REGION: ${{ secrets.REGION }}
-
+  
 jobs:
   build-and-push-ecr:
     runs-on: ${{ (github.event.inputs.branch || github.ref_name) == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
