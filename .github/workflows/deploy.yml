@@ -15,6 +15,7 @@ on:
       branch:  # Used for environment selection selection
         description: Branch to deploy
         required: true
+        default: qa
         type: choice
         options:
           - qa

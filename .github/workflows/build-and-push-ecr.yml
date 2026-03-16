@@ -11,6 +11,7 @@ on:
       branch:
         description: "Branch to deploy"
         required: true
+        default: qa
         type: choice
         options:
           - qa
