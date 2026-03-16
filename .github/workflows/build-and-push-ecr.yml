@@ -19,6 +19,7 @@ on:
 env:
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
   IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+  REGION: ${{ secrets.REGION }}
 
 jobs:
   build-and-push-ecr:
