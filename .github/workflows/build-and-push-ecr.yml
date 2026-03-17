@@ -23,6 +23,7 @@ env:
   REGION: ${{ secrets.REGION }}
 
   
+
 jobs:
   build-and-push-ecr:
     runs-on: ${{ (github.event.inputs.branch || github.ref_name) == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
