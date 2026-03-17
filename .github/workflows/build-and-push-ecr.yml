@@ -22,6 +22,7 @@ env:
   IMAGE_NAME: ${{ vars.IMAGE_NAME }}
   REGION: ${{ secrets.REGION }}
 
+  
 jobs:
   build-and-push-ecr:
     runs-on: ${{ (github.event.inputs.branch || github.ref_name) == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
