@@ -1,7 +1,7 @@
 version: '3.9'
 
 services:
-  app:
+  pps-frontend:
     container_name: pps-frontend
     image:  003380494896.dkr.ecr.ap-south-1.amazonaws.com/realt-pps-be-dev:${IMAGE_TAG?IMAGE_TAG environment variable is required}
     ports:

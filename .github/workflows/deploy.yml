@@ -74,6 +74,7 @@ jobs:
 
             export IMAGE_TAG=${{ inputs.image_tag || github.event.inputs.image_tag }}
             docker compose -f $COMPOSE_FILE pull
+            docker compose -f $COMPOSE_FILE down
             docker compose -f $COMPOSE_FILE up -d --force-recreate
             docker images "$ECR_REGISTRY/$IMAGE_NAME-$ENV" --format "{{.ID}}" | tail -n +4 | xargs -r docker image rm -f 2>/dev/null || true
 
