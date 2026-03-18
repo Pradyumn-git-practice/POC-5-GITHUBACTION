@@ -53,7 +53,6 @@ jobs:
 
       - name: Set Environment Variables
         run: |
-          BRANCH_NAME="${{ inputs.branch || github.event.inputs.branch }}"
           echo "APP_SERVER=${{ vars.APP_SERVER }}" >> $GITHUB_ENV
           echo "COMPOSE_FILE=docker-compose-${{ vars.ENV }}.yml" >> $GITHUB_ENV
 
