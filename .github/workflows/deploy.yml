@@ -33,13 +33,15 @@ run-name: "Deploy #${{ inputs.image_tag || github.event.inputs.image_tag }} [${{
 
 jobs:
   deploy:
+    # For production branch, use production runner, otherwise use dev runner
     runs-on: ${{ (inputs.branch || github.event.inputs.branch) == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}    
     env:
       TARGET_DIR:  ${{ vars.TARGET_DIR }}
       ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
       IMAGE_NAME: ${{ vars.IMAGE_NAME }}
       REGION: ${{ secrets.REGION }}
-    
+
+    # Set environment for deployment job based on branch
     environment: ${{ 
       (inputs.branch || github.event.inputs.branch) == 'pps-master' && 'prod' ||
       (inputs.branch || github.event.inputs.branch) == 'qa' && 'dev' }}
@@ -54,6 +56,7 @@ jobs:
       - name: Set Environment Variables
         run: |
           echo "APP_SERVER=${{ vars.APP_SERVER }}" >> $GITHUB_ENV
+          echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME }}" >> $GITHUB_ENV
           echo "COMPOSE_FILE=docker-compose-${{ vars.ENV }}.yml" >> $GITHUB_ENV
 
       - name: 1. Copy Docker Compose to App Server
@@ -69,12 +72,16 @@ jobs:
             set +x
 
             cd $TARGET_DIR
+
+            
+            aws secretsmanager get-secret-value --secret-id "$APP_SECRET_NAME" --region "$REGION" --query SecretString --output text  | jq -r 'to_entries[] | "\(.key)=\(.value)"' > .env
+
+            chmod 600 .env
             
             aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
 
             export IMAGE_TAG=${{ inputs.image_tag || github.event.inputs.image_tag }}
             docker compose -f $COMPOSE_FILE pull
-            docker compose -f $COMPOSE_FILE down
             docker compose -f $COMPOSE_FILE up -d --force-recreate
             docker images "$ECR_REGISTRY/$IMAGE_NAME-$ENV" --format "{{.ID}}" | tail -n +4 | xargs -r docker image rm -f 2>/dev/null || true
 
