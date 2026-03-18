@@ -31,7 +31,7 @@ jobs:
   
     # Set environment for deployment job based on branch
     environment: ${{ 
-      (github.event.inputs.branch || github.ref_name) == 'pps-master' && 'production' ||
+      (github.event.inputs.branch || github.ref_name) == 'pps-master' && 'prod' ||
       (github.event.inputs.branch || github.ref_name) == 'qa' && 'dev' }}
 
     permissions:
