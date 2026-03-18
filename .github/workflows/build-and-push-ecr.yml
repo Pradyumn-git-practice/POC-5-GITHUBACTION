@@ -49,8 +49,9 @@ jobs:
           BRANCH_NAME="${{ github.event.inputs.branch || github.ref_name }}"
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
           echo "IMAGE_TAG=${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+          echo "ENV=${{ vars.ENV }}" >> $GITHUB_ENV
           echo "${{ vars.ENV_FILE }}" > .env
-          echo "${{ vars.ENV }}" >> $GITHUB_ENV
+
 
       - name: Login to Amazon ECR
         run: |
