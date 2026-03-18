@@ -29,6 +29,8 @@ concurrency:
   group: deploy-${{ inputs.branch || github.event.inputs.branch }}
   cancel-in-progress: true
 
+run-name: "Deploy #${{ inputs.image_tag || github.event.inputs.image_tag }} [${{ github.ref_name }}] - ${{ github.event.head_commit.message || 'Manual Run' }}"
+
 jobs:
   deploy:
     runs-on: ${{ (inputs.branch || github.event.inputs.branch) == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}    
@@ -37,6 +39,10 @@ jobs:
       ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
       IMAGE_NAME: ${{ vars.IMAGE_NAME }}
       REGION: ${{ secrets.REGION }}
+    
+    environment: ${{ 
+      (github.event.inputs.branch || github.ref_name) == 'pps-master' && 'production' ||
+      (github.event.inputs.branch || github.ref_name) == 'qa' && 'dev' }}
 
     steps:
 
@@ -48,20 +54,8 @@ jobs:
       - name: Set Environment Variables
         run: |
           BRANCH_NAME="${{ inputs.branch || github.event.inputs.branch }}"
-          if [[ "$BRANCH_NAME" == "pps-master" ]]; then
-            echo "ENV=production" >> $GITHUB_ENV
-            echo "COMPOSE_FILE=docker-compose-prod.yml" >> $GITHUB_ENV
-            echo "APP_SERVER=${{ secrets.APP_SERVER_PROD }}" >> $GITHUB_ENV
-            echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_PROD }}" >> $GITHUB_ENV
-          elif [[ "$BRANCH_NAME" == "qa" ]]; then
-            echo "ENV=dev" >> $GITHUB_ENV
-            echo "COMPOSE_FILE=docker-compose-qa.yml" >> $GITHUB_ENV
-            echo "APP_SERVER=${{ secrets.APP_SERVER_DEV }}" >> $GITHUB_ENV
-            echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME_DEV }}" >> $GITHUB_ENV
-          else
-              echo "Unsupported branch: ${{ inputs.branch }}"
-              exit 1
-          fi
+          echo "APP_SERVER=${{ vars.APP_SERVER }}" >> $GITHUB_ENV
+          echo "COMPOSE_FILE=docker-compose-${{ vars.ENV }}.yml" >> $GITHUB_ENV
 
       - name: 1. Copy Docker Compose to App Server
         run: |

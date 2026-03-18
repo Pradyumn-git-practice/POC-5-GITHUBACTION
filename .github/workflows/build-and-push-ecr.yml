@@ -1,5 +1,6 @@
 name: Build and Push Docker Image
-   
+
+
 on:
   push:
     branches:
@@ -17,18 +18,24 @@ on:
           - qa
           - pps-master
 
+
+run-name: "Build #${{ github.run_number }} [${{ github.ref_name }}] - ${{ github.event.head_commit.message || 'Manual Run' }}"
+
 env:
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
   IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+  ENV: ${{ vars.ENV }}
   REGION: ${{ secrets.REGION }}
-
   
-
 jobs:
   build-and-push-ecr:
+    # For production branch, use production runner, otherwise use dev runner
     runs-on: ${{ (github.event.inputs.branch || github.ref_name) == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
-
-    environment: ${{ (github.event.inputs.branch || github.ref_name) == 'pps-master' && 'prod' || 'dev' }}
+  
+    # Set environment for deployment job based on branch
+    environment: ${{ 
+      (github.event.inputs.branch || github.ref_name) == 'pps-master' && 'production' ||
+      (github.event.inputs.branch || github.ref_name) == 'qa' && 'dev' }}
 
     permissions:
       id-token: write
@@ -39,22 +46,13 @@ jobs:
         uses: actions/checkout@v4
         with:
                   ref: ${{ github.event.inputs.branch || github.ref_name }}
+                  
       - name: Set Environment Variables
         run: |
           BRANCH_NAME="${{ github.event.inputs.branch || github.ref_name }}"
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
           echo "IMAGE_TAG=${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
-
-          if [[ "$BRANCH_NAME" == "pps-master" ]]; then
-            echo "ENV=production" >> $GITHUB_ENV
-            echo "${{ vars.ENV_FILE_PROD }}" > .env
-          elif [[ "$BRANCH_NAME" == "qa" ]]; then
-            echo "ENV=dev" >> $GITHUB_ENV
-            echo "${{ vars.ENV_FILE_DEV }}" > .env
-          else
-            echo "Unsupported branch: $BRANCH_NAME"
-            exit 1
-          fi
+          echo "${{ vars.ENV_FILE }}" > .env
 
       - name: Login to Amazon ECR
         run: |
@@ -75,10 +73,10 @@ jobs:
         run: |
           docker rmi $ECR_REGISTRY/$IMAGE_NAME-$ENV:$IMAGE_TAG || true
 
-      # - name: Cleanup Docker
-      #   if: always() && vars.CLEANUP_DOCKER == 'true'
-      #   run: |
-      #     docker system prune -af --volumes
+      - name: Cleanup Docker
+        if: always() && vars.CLEANUP_DOCKER == 'true'
+        run: |
+          docker system prune -af --volumes
           
       - name: Cleanup workspace
         if: always()
@@ -88,8 +86,9 @@ jobs:
 
   trigger-deploy:
     needs: build-and-push-ecr
+    if: (github.event.inputs.branch || github.ref_name) != 'pps-master'
     uses: ./.github/workflows/deploy.yml
     with:
       branch: ${{ github.event.inputs.branch || github.ref_name }}
       image_tag: ${{ github.run_number }}
-    secrets: inherit 
+    secrets: inherit
