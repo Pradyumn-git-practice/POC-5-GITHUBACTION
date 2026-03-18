@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       branch:  # Used for environment selection selection
-        description: Branch to deploy
+        description: "Select the branch to deploy (qa for dev, pps-master for prod)"
         required: true
         default: qa
         type: choice
@@ -21,7 +21,7 @@ on:
           - qa
           - pps-master
 
-      image_tag:
+      image_tag: 
         description: Docker image tag
         required: true
 

@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: "Branch to deploy"
+        description: "Select the branch to deploy (qa for dev, pps-master for prod)"
         required: true
         default: qa
         type: choice
