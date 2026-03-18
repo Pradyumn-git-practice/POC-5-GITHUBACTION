@@ -22,7 +22,6 @@ run-name: "Build #${{ github.run_number }} [${{ github.ref_name }}] - ${{ github
 env:
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
   IMAGE_NAME: ${{ vars.IMAGE_NAME }}
-  ENV: ${{ vars.ENV }}
   REGION: ${{ secrets.REGION }}
   
 jobs:
@@ -51,6 +50,7 @@ jobs:
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
           echo "IMAGE_TAG=${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
           echo "${{ vars.ENV_FILE }}" > .env
+          echo "${{ vars.ENV }}" >> $GITHUB_ENV
 
       - name: Login to Amazon ECR
         run: |
