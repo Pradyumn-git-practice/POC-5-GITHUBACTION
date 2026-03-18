@@ -58,16 +58,19 @@ jobs:
 
       - name: Build Docker Image
         run: |
-            docker build -t $ECR_REGISTRY/$IMAGE_NAME-$ENV:$IMAGE_TAG .
+          docker build -t $ECR_REGISTRY/$IMAGE_NAME-$ENV:$IMAGE_TAG \
+                      -t $ECR_REGISTRY/$IMAGE_NAME-$ENV:latest .
 
-      - name: Push Docker Image to ECR
+      - name: Push Docker Images to ECR
         run: |
           docker push $ECR_REGISTRY/$IMAGE_NAME-$ENV:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$IMAGE_NAME-$ENV:latest
 
-      - name: Remove Built Docker Image
+      - name: Remove Built Docker Images
         if: always()
         run: |
           docker rmi $ECR_REGISTRY/$IMAGE_NAME-$ENV:$IMAGE_TAG || true
+          docker rmi $ECR_REGISTRY/$IMAGE_NAME-$ENV:latest || true
 
       - name: Cleanup Docker
         if: always() && vars.CLEANUP_DOCKER == 'true'
