@@ -18,7 +18,6 @@ on:
           - pps-master
 
 run-name: "Build #${{ github.run_number }} [${{ github.event.inputs.branch || github.ref_name }}] - ${{ github.event.head_commit.message || 'Manual Run' }}"          
-# run-name: "Build #${{ github.run_number }} [${{ github.ref_name }}] - ${{ github.event.head_commit.message || 'Manual Run' }}"
 
 env:
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
