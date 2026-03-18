@@ -22,7 +22,6 @@ run-name: "Build #${{ github.run_number }} [${{ github.ref_name }}] - ${{ github
 env:
   ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
   IMAGE_NAME: ${{ vars.IMAGE_NAME }}
-  ENV: ${{ vars.ENV }}
   REGION: ${{ secrets.REGION }}
   
 jobs:
@@ -32,7 +31,7 @@ jobs:
   
     # Set environment for deployment job based on branch
     environment: ${{ 
-      (github.event.inputs.branch || github.ref_name) == 'pps-master' && 'production' ||
+      (github.event.inputs.branch || github.ref_name) == 'pps-master' && 'prod' ||
       (github.event.inputs.branch || github.ref_name) == 'qa' && 'dev' }}
 
     permissions:
@@ -50,7 +49,9 @@ jobs:
           BRANCH_NAME="${{ github.event.inputs.branch || github.ref_name }}"
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
           echo "IMAGE_TAG=${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
+          echo "ENV=${{ vars.ENV }}" >> $GITHUB_ENV
           echo "${{ vars.ENV_FILE }}" > .env
+
 
       - name: Login to Amazon ECR
         run: |
