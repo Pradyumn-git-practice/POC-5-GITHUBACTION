@@ -18,8 +18,8 @@ on:
         default: qa
         type: choice
         options:
-          - qa
-          - pps-master
+          - staging
+          - main
 
       image_tag:
         description: Docker image tag to deploy
@@ -33,7 +33,7 @@ run-name: "Deploy #${{ inputs.image_tag || github.event.inputs.image_tag }} [${{
 
 jobs:
   deploy:
-    runs-on: ${{ (inputs.branch || github.event.inputs.branch) == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
+    runs-on: ${{ (inputs.branch || github.event.inputs.branch) == 'main' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
 
     permissions:
       id-token: write
@@ -49,8 +49,8 @@ jobs:
       IMAGE_TAG: ${{ inputs.image_tag || github.event.inputs.image_tag }}
 
     environment: ${{
-      (inputs.branch || github.event.inputs.branch) == 'pps-master' && 'prod' ||
-      (inputs.branch || github.event.inputs.branch) == 'qa' && 'dev' }}
+      (inputs.branch || github.event.inputs.branch) == 'main' && 'prod' ||
+      (inputs.branch || github.event.inputs.branch) == 'staging' && 'dev' }}
 
     steps:
       - name: Checkout code

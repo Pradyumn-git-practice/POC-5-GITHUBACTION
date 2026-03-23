@@ -4,18 +4,18 @@ name: Build and Push Docker Image
 on:
   push:
     branches:
-      - qa
-      - pps-master
+      - staging
+      - main
   workflow_dispatch:
     inputs:
       branch:
-        description: "Select the branch to deploy (qa for dev, pps-master for prod)"
+        description: "Select the branch to deploy (staging for dev, main for prod)"
         required: true
         default: qa
         type: choice
         options:
-          - qa
-          - pps-master
+          - staging
+          - main
 
 run-name: "Build #${{ github.run_number }} [${{ github.event.inputs.branch || github.ref_name }}] - ${{ github.event.head_commit.message || 'Manual Run' }}"          
 
@@ -27,12 +27,12 @@ env:
 jobs:
   build-and-push-ecr:
     # For production branch, use production runner, otherwise use dev runner
-    runs-on: ${{ (github.event.inputs.branch || github.ref_name) == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
+    runs-on: ${{ (github.event.inputs.branch || github.ref_name) == 'main' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
   
     # Set environment for deployment job based on branch
     environment: ${{ 
-      (github.event.inputs.branch || github.ref_name) == 'pps-master' && 'prod' ||
-      (github.event.inputs.branch || github.ref_name) == 'qa' && 'dev' }}
+      (github.event.inputs.branch || github.ref_name) == 'main' && 'prod' ||
+      (github.event.inputs.branch || github.ref_name) == 'staging' && 'dev' }}
 
     permissions:
       id-token: write
@@ -85,7 +85,7 @@ jobs:
 
   trigger-deploy:
     needs: build-and-push-ecr
-    if: (github.event.inputs.branch || github.ref_name) != 'pps-master'
+    if: (github.event.inputs.branch || github.ref_name) != 'main'
     uses: ./.github/workflows/deploy.yml
     with:
       branch: ${{ github.event.inputs.branch || github.ref_name }}
