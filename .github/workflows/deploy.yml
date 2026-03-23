@@ -35,10 +35,6 @@ jobs:
   deploy:
     runs-on: ${{ (inputs.branch || github.event.inputs.branch) == 'main' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
 
-    permissions:
-      id-token: write
-      contents: read
-
     env:
       REGION: ${{ secrets.REGION }}
       ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
