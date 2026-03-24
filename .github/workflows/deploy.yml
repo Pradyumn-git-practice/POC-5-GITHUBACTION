@@ -68,6 +68,29 @@ jobs:
           : "${ECS_CONTAINER_NAME:?ECS_CONTAINER_NAME variable is required}"
           : "${IMAGE_URI:?IMAGE_URI must be set}"
 
+      - name: Validate ECS service exists
+        run: |
+          set -euo pipefail
+
+          aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --region "$REGION" > service-details.json
+
+          SERVICE_FAILURE_REASON=$(jq -r '.failures[0].reason // empty' service-details.json)
+          SERVICE_FAILURE_ARN=$(jq -r '.failures[0].arn // empty' service-details.json)
+          if [ -n "$SERVICE_FAILURE_REASON" ]; then
+            echo "ECS service lookup failed for ${SERVICE_FAILURE_ARN}: ${SERVICE_FAILURE_REASON}" >&2
+            echo "Verify ECS_CLUSTER='$ECS_CLUSTER' and ECS_SERVICE='$ECS_SERVICE' in the selected GitHub Environment variables." >&2
+            exit 1
+          fi
+
+          SERVICE_STATUS=$(jq -r '.services[0].status // empty' service-details.json)
+          if [ "$SERVICE_STATUS" != "ACTIVE" ]; then
+            echo "ECS service is not ACTIVE (status=$SERVICE_STATUS)." >&2
+            exit 1
+          fi
+
       - name: Validate image exists in ECR
         run: |
           set -euo pipefail
@@ -83,18 +106,6 @@ jobs:
           if [ -n "${ECS_TASK_DEFINITION:-}" ]; then
             CURRENT_TASK_DEF_ARN="$ECS_TASK_DEFINITION"
           else
-            aws ecs describe-services \
-              --cluster "$ECS_CLUSTER" \
-              --services "$ECS_SERVICE" \
-              --region "$REGION" > service-details.json
-
-            SERVICE_FAILURE_REASON=$(jq -r '.failures[0].reason // empty' service-details.json)
-            SERVICE_FAILURE_ARN=$(jq -r '.failures[0].arn // empty' service-details.json)
-            if [ -n "$SERVICE_FAILURE_REASON" ]; then
-              echo "ECS service lookup failed for ${SERVICE_FAILURE_ARN}: ${SERVICE_FAILURE_REASON}" >&2
-              exit 1
-            fi
-
             CURRENT_TASK_DEF_ARN=$(jq -r '.services[0].taskDefinition // empty' service-details.json)
           fi
 
