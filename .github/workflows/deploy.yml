@@ -80,9 +80,68 @@ jobs:
           SERVICE_FAILURE_REASON=$(jq -r '.failures[0].reason // empty' service-details.json)
           SERVICE_FAILURE_ARN=$(jq -r '.failures[0].arn // empty' service-details.json)
           if [ -n "$SERVICE_FAILURE_REASON" ]; then
-            echo "ECS service lookup failed for ${SERVICE_FAILURE_ARN}: ${SERVICE_FAILURE_REASON}" >&2
-            echo "Verify ECS_CLUSTER='$ECS_CLUSTER' and ECS_SERVICE='$ECS_SERVICE' in the selected GitHub Environment variables." >&2
-            exit 1
+            if [ "$SERVICE_FAILURE_REASON" = "MISSING" ]; then
+              echo "Configured ECS service '$ECS_SERVICE' not found. Attempting auto-detection in cluster '$ECS_CLUSTER'." >&2
+
+              mapfile -t CLUSTER_SERVICE_ARNS < <(
+                aws ecs list-services \
+                  --cluster "$ECS_CLUSTER" \
+                  --region "$REGION" \
+                  --query 'serviceArns[]' \
+                  --output text | tr '\t' '\n' | sed '/^$/d'
+              )
+
+              if [ "${#CLUSTER_SERVICE_ARNS[@]}" -eq 0 ]; then
+                echo "No ECS services found in cluster '$ECS_CLUSTER'." >&2
+                exit 1
+              fi
+
+              if [ "${#CLUSTER_SERVICE_ARNS[@]}" -eq 1 ]; then
+                ECS_SERVICE="${CLUSTER_SERVICE_ARNS[0]##*/}"
+                echo "Auto-selected only service in cluster: $ECS_SERVICE" >&2
+              elif [ -n "${ECS_TASK_DEFINITION:-}" ]; then
+                TASK_FAMILY="${ECS_TASK_DEFINITION##*/}"
+                TASK_FAMILY="${TASK_FAMILY%%:*}"
+
+                mapfile -t MATCHED_SERVICES < <(
+                  aws ecs describe-services \
+                    --cluster "$ECS_CLUSTER" \
+                    --services "${CLUSTER_SERVICE_ARNS[@]}" \
+                    --region "$REGION" \
+                    --query 'services[].{serviceName:serviceName,taskDefinition:taskDefinition}' \
+                    --output json | jq -r --arg family "$TASK_FAMILY" '.[] | select(.taskDefinition | contains("task-definition/" + $family + ":")) | .serviceName'
+                )
+
+                if [ "${#MATCHED_SERVICES[@]}" -eq 1 ]; then
+                  ECS_SERVICE="${MATCHED_SERVICES[0]}"
+                  echo "Auto-selected service from task family '$TASK_FAMILY': $ECS_SERVICE" >&2
+                fi
+              fi
+
+              if [ -z "${ECS_SERVICE:-}" ] || [ "$ECS_SERVICE" = "${SERVICE_FAILURE_ARN##*/}" ]; then
+                echo "Unable to auto-detect ECS service. Available services:" >&2
+                printf '%s\n' "${CLUSTER_SERVICE_ARNS[@]##*/}" >&2
+                echo "Set ECS_SERVICE to one of the above service names (or full ARN) in GitHub Environment variables." >&2
+                exit 1
+              fi
+
+              aws ecs describe-services \
+                --cluster "$ECS_CLUSTER" \
+                --services "$ECS_SERVICE" \
+                --region "$REGION" > service-details.json
+
+              SERVICE_FAILURE_REASON=$(jq -r '.failures[0].reason // empty' service-details.json)
+              if [ -n "$SERVICE_FAILURE_REASON" ]; then
+                echo "ECS service lookup failed after auto-detection: ${SERVICE_FAILURE_REASON}" >&2
+                exit 1
+              fi
+
+              echo "ECS_SERVICE=$ECS_SERVICE" >> $GITHUB_ENV
+            else
+              echo "ECS service lookup failed for ${SERVICE_FAILURE_ARN}: ${SERVICE_FAILURE_REASON}" >&2
+              echo "Verify ECS_CLUSTER='$ECS_CLUSTER' and ECS_SERVICE='$ECS_SERVICE' in the selected GitHub Environment variables." >&2
+              exit 1
+            fi
           fi
 
           SERVICE_STATUS=$(jq -r '.services[0].status // empty' service-details.json)
