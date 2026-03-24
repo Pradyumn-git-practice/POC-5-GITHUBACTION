@@ -98,7 +98,9 @@ jobs:
                 .requiresAttributes,
                 .compatibilities,
                 .registeredAt,
-                .registeredBy
+                .registeredBy,
+                .deregisteredAt,
+                .deregisteredBy
               )
               | .containerDefinitions |= map(
                   if .name == env.ECS_CONTAINER_NAME
