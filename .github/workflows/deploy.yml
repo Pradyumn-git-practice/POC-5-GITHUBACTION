@@ -41,6 +41,7 @@ jobs:
       IMAGE_NAME: ${{ vars.IMAGE_NAME }}
       ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
       ECS_SERVICE: ${{ vars.ECS_SERVICE }}
+      ECS_TASK_DEFINITION: ${{ vars.ECS_TASK_DEFINITION }}
       ECS_CONTAINER_NAME: ${{ vars.ECS_CONTAINER_NAME }}
       IMAGE_TAG: ${{ inputs.image_tag || github.event.inputs.image_tag }}
 
@@ -79,12 +80,28 @@ jobs:
         run: |
           set -euo pipefail
 
-          CURRENT_TASK_DEF_ARN=$(aws ecs describe-services \
-            --cluster "$ECS_CLUSTER" \
-            --services "$ECS_SERVICE" \
-            --region "$REGION" \
-            --query 'services[0].taskDefinition' \
-            --output text)
+          if [ -n "${ECS_TASK_DEFINITION:-}" ]; then
+            CURRENT_TASK_DEF_ARN="$ECS_TASK_DEFINITION"
+          else
+            aws ecs describe-services \
+              --cluster "$ECS_CLUSTER" \
+              --services "$ECS_SERVICE" \
+              --region "$REGION" > service-details.json
+
+            SERVICE_FAILURE_REASON=$(jq -r '.failures[0].reason // empty' service-details.json)
+            SERVICE_FAILURE_ARN=$(jq -r '.failures[0].arn // empty' service-details.json)
+            if [ -n "$SERVICE_FAILURE_REASON" ]; then
+              echo "ECS service lookup failed for ${SERVICE_FAILURE_ARN}: ${SERVICE_FAILURE_REASON}" >&2
+              exit 1
+            fi
+
+            CURRENT_TASK_DEF_ARN=$(jq -r '.services[0].taskDefinition // empty' service-details.json)
+          fi
+
+          if [ -z "$CURRENT_TASK_DEF_ARN" ] || [ "$CURRENT_TASK_DEF_ARN" = "None" ] || [ "$CURRENT_TASK_DEF_ARN" = "null" ]; then
+            echo "Unable to resolve current task definition. Check ECS_CLUSTER/ECS_SERVICE or set ECS_TASK_DEFINITION variable." >&2
+            exit 1
+          fi
 
           aws ecs describe-task-definition \
             --task-definition "$CURRENT_TASK_DEF_ARN" \
