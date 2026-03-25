@@ -1,4 +1,4 @@
-name: Deploy Docker Image to Server
+name: Deploy to Amazon ECS
 
 on:
   workflow_call:
@@ -12,17 +12,17 @@ on:
 
   workflow_dispatch:
     inputs:
-      branch:  # Used for environment selection selection
+      branch:
         description: "Select the branch to deploy (qa for dev, pps-master for prod)"
         required: true
         default: qa
         type: choice
         options:
-          - qa
-          - pps-master
+          - staging
+          - main
 
-      image_tag: 
-        description: Docker image tag
+      image_tag:
+        description: Docker image tag to deploy
         required: true
 
 concurrency:
@@ -33,59 +33,191 @@ run-name: "Deploy #${{ inputs.image_tag || github.event.inputs.image_tag }} [${{
 
 jobs:
   deploy:
-    # For production branch, use production runner, otherwise use dev runner
-    runs-on: ${{ (inputs.branch || github.event.inputs.branch) == 'pps-master' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}    
+    runs-on: ${{ (inputs.branch || github.event.inputs.branch) == 'main' && fromJson('["self-hosted","production"]') || fromJson('["self-hosted","dev"]') }}
+
     env:
-      TARGET_DIR:  ${{ vars.TARGET_DIR }}
+      REGION: ${{ secrets.REGION }}
       ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
       IMAGE_NAME: ${{ vars.IMAGE_NAME }}
-      REGION: ${{ secrets.REGION }}
+      ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+      ECS_SERVICE: ${{ vars.ECS_SERVICE }}
+      ECS_TASK_DEFINITION: ${{ vars.ECS_TASK_DEFINITION }}
+      ECS_CONTAINER_NAME: ${{ vars.ECS_CONTAINER_NAME }}
+      IMAGE_TAG: ${{ inputs.image_tag || github.event.inputs.image_tag }}
 
-    # Set environment for deployment job based on branch
-    environment: ${{ 
-      (inputs.branch || github.event.inputs.branch) == 'pps-master' && 'prod' ||
-      (inputs.branch || github.event.inputs.branch) == 'qa' && 'dev' }}
+    environment: ${{
+      (inputs.branch || github.event.inputs.branch) == 'main' && 'prod' ||
+      (inputs.branch || github.event.inputs.branch) == 'staging' && 'dev' }}
 
     steps:
-
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.branch || github.event.inputs.branch }}
 
-      - name: Set Environment Variables
+      - name: Set deployment variables
         run: |
-          echo "APP_SERVER=${{ vars.APP_SERVER }}" >> $GITHUB_ENV
-          echo "APP_SECRET_NAME=${{ secrets.APP_SECRET_NAME }}" >> $GITHUB_ENV
-          echo "COMPOSE_FILE=docker-compose-${{ vars.ENV }}.yml" >> $GITHUB_ENV
+          echo "ENV=${{ vars.ENV }}" >> $GITHUB_ENV
+          echo "IMAGE_URI=${ECR_REGISTRY}/${IMAGE_NAME}-${{ vars.ENV }}:${IMAGE_TAG}" >> $GITHUB_ENV
 
-      - name: 1. Copy Docker Compose to App Server
+      - name: Validate required ECS variables
         run: |
-          ssh -o StrictHostKeyChecking=no $APP_SERVER "mkdir -p $TARGET_DIR"
+          set -euo pipefail
+          : "${ECS_CLUSTER:?ECS_CLUSTER variable is required}"
+          : "${ECS_SERVICE:?ECS_SERVICE variable is required}"
+          : "${ECS_CONTAINER_NAME:?ECS_CONTAINER_NAME variable is required}"
+          : "${IMAGE_URI:?IMAGE_URI must be set}"
 
-          scp -o StrictHostKeyChecking=no  ${{ env.COMPOSE_FILE }} $APP_SERVER:$TARGET_DIR/
-
-      - name: 2. Create .env, Pull and Run Docker Compose
+      - name: Validate ECS service exists
         run: |
-          ssh -T -o StrictHostKeyChecking=no $APP_SERVER << EOF
-            set -euo pipefail
-            set +x
+          set -euo pipefail
 
-            cd $TARGET_DIR
+          aws ecs describe-services \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --region "$REGION" > service-details.json
 
-            
-            aws secretsmanager get-secret-value --secret-id "$APP_SECRET_NAME" --region "$REGION" --query SecretString --output text  | jq -r 'to_entries[] | "\(.key)=\(.value)"' > .env
+          SERVICE_FAILURE_REASON=$(jq -r '.failures[0].reason // empty' service-details.json)
+          SERVICE_FAILURE_ARN=$(jq -r '.failures[0].arn // empty' service-details.json)
+          if [ -n "$SERVICE_FAILURE_REASON" ]; then
+            if [ "$SERVICE_FAILURE_REASON" = "MISSING" ]; then
+              echo "Configured ECS service '$ECS_SERVICE' not found. Attempting auto-detection in cluster '$ECS_CLUSTER'." >&2
 
-            chmod 600 .env
-            
-            aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+              mapfile -t CLUSTER_SERVICE_ARNS < <(
+                aws ecs list-services \
+                  --cluster "$ECS_CLUSTER" \
+                  --region "$REGION" \
+                  --query 'serviceArns[]' \
+                  --output text | tr '\t' '\n' | sed '/^$/d'
+              )
 
-            export IMAGE_TAG=${{ inputs.image_tag || github.event.inputs.image_tag }}
-            docker compose -f $COMPOSE_FILE pull
-            docker compose -f $COMPOSE_FILE up -d --force-recreate
-            docker images "$ECR_REGISTRY/$IMAGE_NAME-$ENV" --format "{{.ID}}" | tail -n +4 | xargs -r docker image rm -f 2>/dev/null || true
+              if [ "${#CLUSTER_SERVICE_ARNS[@]}" -eq 0 ]; then
+                echo "No ECS services found in cluster '$ECS_CLUSTER'." >&2
+                exit 1
+              fi
 
-          EOF
+              if [ "${#CLUSTER_SERVICE_ARNS[@]}" -eq 1 ]; then
+                ECS_SERVICE="${CLUSTER_SERVICE_ARNS[0]##*/}"
+                echo "Auto-selected only service in cluster: $ECS_SERVICE" >&2
+              elif [ -n "${ECS_TASK_DEFINITION:-}" ]; then
+                TASK_FAMILY="${ECS_TASK_DEFINITION##*/}"
+                TASK_FAMILY="${TASK_FAMILY%%:*}"
+
+                mapfile -t MATCHED_SERVICES < <(
+                  aws ecs describe-services \
+                    --cluster "$ECS_CLUSTER" \
+                    --services "${CLUSTER_SERVICE_ARNS[@]}" \
+                    --region "$REGION" \
+                    --query 'services[].{serviceName:serviceName,taskDefinition:taskDefinition}' \
+                    --output json | jq -r --arg family "$TASK_FAMILY" '.[] | select(.taskDefinition | contains("task-definition/" + $family + ":")) | .serviceName'
+                )
+
+                if [ "${#MATCHED_SERVICES[@]}" -eq 1 ]; then
+                  ECS_SERVICE="${MATCHED_SERVICES[0]}"
+                  echo "Auto-selected service from task family '$TASK_FAMILY': $ECS_SERVICE" >&2
+                fi
+              fi
+
+              if [ -z "${ECS_SERVICE:-}" ] || [ "$ECS_SERVICE" = "${SERVICE_FAILURE_ARN##*/}" ]; then
+                echo "Unable to auto-detect ECS service. Available services:" >&2
+                printf '%s\n' "${CLUSTER_SERVICE_ARNS[@]##*/}" >&2
+                echo "Set ECS_SERVICE to one of the above service names (or full ARN) in GitHub Environment variables." >&2
+                exit 1
+              fi
+
+              aws ecs describe-services \
+                --cluster "$ECS_CLUSTER" \
+                --services "$ECS_SERVICE" \
+                --region "$REGION" > service-details.json
+
+              SERVICE_FAILURE_REASON=$(jq -r '.failures[0].reason // empty' service-details.json)
+              if [ -n "$SERVICE_FAILURE_REASON" ]; then
+                echo "ECS service lookup failed after auto-detection: ${SERVICE_FAILURE_REASON}" >&2
+                exit 1
+              fi
+
+              echo "ECS_SERVICE=$ECS_SERVICE" >> $GITHUB_ENV
+            else
+              echo "ECS service lookup failed for ${SERVICE_FAILURE_ARN}: ${SERVICE_FAILURE_REASON}" >&2
+              echo "Verify ECS_CLUSTER='$ECS_CLUSTER' and ECS_SERVICE='$ECS_SERVICE' in the selected GitHub Environment variables." >&2
+              exit 1
+            fi
+          fi
+
+          SERVICE_STATUS=$(jq -r '.services[0].status // empty' service-details.json)
+          if [ "$SERVICE_STATUS" != "ACTIVE" ]; then
+            echo "ECS service is not ACTIVE (status=$SERVICE_STATUS)." >&2
+            exit 1
+          fi
+
+      - name: Validate image exists in ECR
+        run: |
+          set -euo pipefail
+          aws ecr describe-images \
+            --repository-name "${IMAGE_NAME}-${ENV}" \
+            --image-ids imageTag="${IMAGE_TAG}" \
+            --region "$REGION" >/dev/null
+
+      - name: Register new task definition revision
+        run: |
+          set -euo pipefail
+
+          if [ -n "${ECS_TASK_DEFINITION:-}" ]; then
+            CURRENT_TASK_DEF_ARN="$ECS_TASK_DEFINITION"
+          else
+            CURRENT_TASK_DEF_ARN=$(jq -r '.services[0].taskDefinition // empty' service-details.json)
+          fi
+
+          if [ -z "$CURRENT_TASK_DEF_ARN" ] || [ "$CURRENT_TASK_DEF_ARN" = "None" ] || [ "$CURRENT_TASK_DEF_ARN" = "null" ]; then
+            echo "Unable to resolve current task definition. Check ECS_CLUSTER/ECS_SERVICE or set ECS_TASK_DEFINITION variable." >&2
+            exit 1
+          fi
+
+          aws ecs describe-task-definition \
+            --task-definition "$CURRENT_TASK_DEF_ARN" \
+            --region "$REGION" \
+            --query 'taskDefinition' > task-def.json
+
+          jq 'del(
+                .taskDefinitionArn,
+                .revision,
+                .status,
+                .requiresAttributes,
+                .compatibilities,
+                .registeredAt,
+                .registeredBy,
+                .deregisteredAt,
+                .deregisteredBy
+              )
+              | .containerDefinitions |= map(
+                  if .name == env.ECS_CONTAINER_NAME
+                  then .image = env.IMAGE_URI
+                  else .
+                  end
+                )' task-def.json > new-task-def.json
+
+          NEW_TASK_DEF_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://new-task-def.json \
+            --region "$REGION" \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "NEW_TASK_DEF_ARN=$NEW_TASK_DEF_ARN" >> $GITHUB_ENV
+
+      - name: Deploy task definition to ECS service
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_SERVICE" \
+            --task-definition "$NEW_TASK_DEF_ARN" \
+            --force-new-deployment \
+            --region "$REGION" >/dev/null
+
+          aws ecs wait services-stable \
+            --cluster "$ECS_CLUSTER" \
+            --services "$ECS_SERVICE" \
+            --region "$REGION"
 
       - name: Cleanup workspace
         if: always()
