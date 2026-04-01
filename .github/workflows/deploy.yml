@@ -223,31 +223,31 @@ jobs:
       - name: Cleanup old Task Definitions
         if: success()
         run: |
-                set -euo pipefail
-                
-                # Use the GitHub variable, defaulting to 50 if it is not defined
-                LIMIT=${{ vars.MAX_REVISIONS || 50 }}
-                
-                echo "Cleaning up revisions for family: $TASK_FAMILY (Keeping top $LIMIT)"
-                
-                # List all active revisions, slice the array starting at the LIMIT index
-                OLD_REVISIONS=$(aws ecs list-task-definitions \
-                  --family-prefix "$TASK_FAMILY" \
-                  --status ACTIVE \
-                  --sort DESC \
-                  --region "$REGION" \
-                  --query 'taskDefinitionArns' \
-                  --output json | jq -r ".[$LIMIT:] | .[]")
+            set -euo pipefail
+            
+            # Use the GitHub variable, defaulting to 50 if it's missing
+            LIMIT=${{ vars.MAX_REVISIONS || 50 }}
+            
+            # Use the variable exported to GITHUB_ENV in the previous step
+            echo "Cleaning up revisions for family: $TASK_FAMILY (Keeping top $LIMIT)"
+            
+            OLD_REVISIONS=$(aws ecs list-task-definitions \
+              --family-prefix "$TASK_FAMILY" \
+              --status ACTIVE \
+              --sort DESC \
+              --region "$REGION" \
+              --query 'taskDefinitionArns' \
+              --output json | jq -r ".[$LIMIT:] | .[]")
 
-                if [ -z "$OLD_REVISIONS" ]; then
-                  echo "Fewer than $LIMIT revisions found. No cleanup needed."
-                  exit 0
-                fi
+            if [ -z "$OLD_REVISIONS" ]; then
+              echo "Fewer than $LIMIT revisions found. No cleanup needed."
+              exit 0
+            fi
 
-                for arn in $OLD_REVISIONS; do
-                  echo "Deregistering old revision: $arn"
-                  aws ecs deregister-task-definition --task-definition "$arn" --region "$REGION" > /dev/null
-                done
+            for arn in $OLD_REVISIONS; do
+              echo "Deregistering old revision: $arn"
+              aws ecs deregister-task-definition --task-definition "$arn" --region "$REGION" > /dev/null
+            done
 
 
 
