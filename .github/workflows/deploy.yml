@@ -227,7 +227,7 @@ jobs:
               
               LIMIT=${{ vars.MAX_REVISIONS || 50 }}
               [[ "$LIMIT" =~ ^[0-9]+$ ]] || LIMIT=50
-              [ "$LIMIT" -ge 15 ] || LIMIT=50
+              [ "$LIMIT" -ge 5 ] || LIMIT=50
               
               TASK_FAMILY="$ECS_TASK_DEFINITION"
 
