@@ -223,39 +223,60 @@ jobs:
       - name: Cleanup old Task Definitions
         if: success()
         run: |
-            set -euo pipefail
-            
-            # Use the GitHub variable, defaulting to 50 if it's missing
-            LIMIT=${{ vars.MAX_REVISIONS || 50 }}
+              set -euo pipefail
+              
+              LIMIT=${{ vars.MAX_REVISIONS || 50 }}
+              if ! [[ "$LIMIT" =~ ^[0-9]+$ ]] || [ "$LIMIT" -lt 1 ]; then
+                echo "MAX_REVISIONS must be a positive integer. Got: $LIMIT" >&2
+                exit 1
+              fi
+              
+              # 1. Resolve Family
+              TASK_DEF_SOURCE="${NEW_TASK_DEF_ARN:-${ECS_TASK_DEFINITION:-}}"
+              : "${TASK_DEF_SOURCE:?Unable to resolve task definition source for cleanup}"
+              TASK_FAMILY="${TASK_DEF_SOURCE##*/}"
+              TASK_FAMILY="${TASK_FAMILY%%:*}"
 
-            # Resolve task definition family from the newly registered ARN first,
-            # then fall back to ECS_TASK_DEFINITION.
-            TASK_DEF_SOURCE="${NEW_TASK_DEF_ARN:-${ECS_TASK_DEFINITION:-}}"
-            : "${TASK_DEF_SOURCE:?Unable to resolve task definition source for cleanup}"
-            TASK_FAMILY="${TASK_DEF_SOURCE##*/}"
-            TASK_FAMILY="${TASK_FAMILY%%:*}"
-            
-            echo "Cleaning up revisions for family: $TASK_FAMILY (Keeping top $LIMIT)"
-            
-            OLD_REVISIONS=$(aws ecs list-task-definitions \
-              --family-prefix "$TASK_FAMILY" \
-              --status ACTIVE \
-              --sort DESC \
-              --region "$REGION" \
-              --query 'taskDefinitionArns' \
-              --output json | jq -r ".[$LIMIT:] | .[]")
+              # 2. Identify what is CURRENTLY running to protect it
+              CURRENT_ACTIVE_ARN=$(aws ecs describe-services \
+                --cluster "$ECS_CLUSTER" \
+                --services "$ECS_SERVICE" \
+                --region "$REGION" \
+                --query 'services[0].taskDefinition' \
+                --output text)
 
-            if [ -z "$OLD_REVISIONS" ]; then
-              echo "Fewer than $LIMIT revisions found. No cleanup needed."
-              exit 0
-            fi
+              if [ -z "$CURRENT_ACTIVE_ARN" ] || [ "$CURRENT_ACTIVE_ARN" = "None" ] || [ "$CURRENT_ACTIVE_ARN" = "null" ]; then
+                echo "Unable to resolve currently active task definition for service $ECS_SERVICE" >&2
+                exit 1
+              fi
 
-            for arn in $OLD_REVISIONS; do
-              echo "Deregistering old revision: $arn"
-              aws ecs deregister-task-definition --task-definition "$arn" --region "$REGION" > /dev/null
-            done
+              echo "Cleaning up family: $TASK_FAMILY (Limit: $LIMIT, Protecting active: $CURRENT_ACTIVE_ARN, Protecting new: ${NEW_TASK_DEF_ARN:-n/a})"
 
+              # 3. Get list
+              ALL_REVISIONS=$(aws ecs list-task-definitions \
+                --family-prefix "$TASK_FAMILY" \
+                --status ACTIVE \
+                --sort DESC \
+                --region "$REGION" \
+                --query 'taskDefinitionArns' \
+                --output json)
 
+              # 4. Filter out the ones to keep and protected definitions
+              mapfile -t OLD_REVISIONS < <(
+                echo "$ALL_REVISIONS" | jq -r --arg current "$CURRENT_ACTIVE_ARN" --arg new "${NEW_TASK_DEF_ARN:-}" \
+                  ".[$LIMIT:] | .[] | select(. != \$current and . != \$new)"
+              )
+
+              if [ "${#OLD_REVISIONS[@]}" -eq 0 ]; then
+                echo "No old revisions exceed the limit of $LIMIT."
+                exit 0
+              fi
+
+              # 5. Safe Deregistration
+              for arn in "${OLD_REVISIONS[@]}"; do
+                echo "Deregistering: $arn"
+                aws ecs deregister-task-definition --task-definition "$arn" --region "$REGION" > /dev/null
+              done
 
 
 
