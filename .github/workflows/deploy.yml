@@ -227,8 +227,14 @@ jobs:
             
             # Use the GitHub variable, defaulting to 50 if it's missing
             LIMIT=${{ vars.MAX_REVISIONS || 50 }}
+
+            # Resolve task definition family from the newly registered ARN first,
+            # then fall back to ECS_TASK_DEFINITION.
+            TASK_DEF_SOURCE="${NEW_TASK_DEF_ARN:-${ECS_TASK_DEFINITION:-}}"
+            : "${TASK_DEF_SOURCE:?Unable to resolve task definition source for cleanup}"
+            TASK_FAMILY="${TASK_DEF_SOURCE##*/}"
+            TASK_FAMILY="${TASK_FAMILY%%:*}"
             
-            # Use the variable exported to GITHUB_ENV in the previous step
             echo "Cleaning up revisions for family: $TASK_FAMILY (Keeping top $LIMIT)"
             
             OLD_REVISIONS=$(aws ecs list-task-definitions \
